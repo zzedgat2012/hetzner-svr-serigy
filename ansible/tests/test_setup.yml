@@ -1,0 +1,24 @@
+---
+- name: Verify server setup
+  hosts: all
+  become: true
+  tasks:
+    - name: Check if user 'serigy' exists
+      ansible.builtin.command:
+        cmd: id -u serigy
+      register: user_check
+      changed_when: false
+      failed_when: user_check.rc != 0
+
+    - name: Verify SELinux is enforcing
+      ansible.builtin.shell: getenforce
+      register: selinux_status
+      changed_when: false
+      failed_when: "'Enforcing' not in selinux_status.stdout"
+
+    - name: Ensure Docker is installed
+      ansible.builtin.command:
+        cmd: docker --version
+      register: docker_check
+      changed_when: false
+      failed_when: docker_check.rc != 0

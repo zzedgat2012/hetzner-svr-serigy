@@ -1,0 +1,11 @@
+all:
+  hosts:
+    svr1:
+      ansible_host: "{{ lookup('env', 'TAILSCALE_SVR1_IP') }}"
+    svr2:
+      ansible_host: "{{ lookup('env', 'TAILSCALE_SVR2_IP') }}"
+    svr3:
+      ansible_host: "{{ lookup('env', 'TAILSCALE_SVR3_IP') }}"
+
+  vars:
+    ansible_user: root

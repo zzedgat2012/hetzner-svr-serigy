@@ -1,0 +1,6 @@
+---
+- hosts: svr1,svr2,svr3
+  become: true
+  roles:
+    - docker_install
+    - swarm_config

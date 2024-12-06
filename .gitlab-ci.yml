@@ -1,13 +1,76 @@
-# You can override the included template(s) by including variable overrides
-# SAST customization: https://docs.gitlab.com/ee/user/application_security/sast/#customizing-the-sast-settings
-# Secret Detection customization: https://docs.gitlab.com/ee/user/application_security/secret_detection/pipeline/#customization
-# Dependency Scanning customization: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/#customizing-the-dependency-scanning-settings
-# Container Scanning customization: https://docs.gitlab.com/ee/user/application_security/container_scanning/#customizing-the-container-scanning-settings
-# Note that environment variables can be set in several places
-# See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
 stages:
-- test
+  - test
+  - setup
+  - docker
+  - swarm
+
+variables:
+  TAILSCALE_AUTH_KEY: $TAILSCALE_AUTH_KEY
+  TAILSCALE_ROUTES: $TAILSCALE_ROUTES
+  TAILSCALE_SVR1_IP: $TAILSCALE_SVR1_IP
+  TAILSCALE_SVR2_IP: $TAILSCALE_SVR2_IP
+  TAILSCALE_SVR3_IP: $TAILSCALE_SVR3_IP
+  ANSIBLE_LOG_PATH: logs/ansible.log
+
+include:
+  - template: Security/SAST.gitlab-ci.yml  # GitLab's built-in SAST template
+
+before_script:
+  # Install dependencies
+  - apt-get update && apt-get install -y make ansible
+  # Authenticate with Tailscale for secure access
+  - curl -fsSL https://pkgs.tailscale.com/stable/debian/bullseye.gpg | gpg --dearmor -o /usr/share/keyrings/tailscale-archive-keyring.gpg
+  - curl -fsSL https://pkgs.tailscale.com/stable/debian/bullseye.list | tee /etc/apt/sources.list.d/tailscale.list
+  - apt-get update && apt-get install -y tailscale
+  - tailscale up --authkey=${TAILSCALE_AUTH_KEY} --advertise-routes=${TAILSCALE_ROUTES}
+
 sast:
   stage: test
-include:
-- template: Security/SAST.gitlab-ci.yml
+  rules:
+    - if: $CI_COMMIT_BRANCH  # Run SAST on every branch
+  script:
+    - echo "🛡️ Running Static Application Security Testing (SAST)..."
+
+setup:
+  stage: setup
+  script:
+    - echo "🔒 Performing server hardening..."
+    - make setup
+  artifacts:
+    paths:
+      - logs/ansible.log
+    expire_in: 1 week
+
+docker:
+  stage: docker
+  script:
+    - echo "🐳 Installing Docker..."
+    - make docker
+  artifacts:
+    paths:
+      - logs/ansible.log
+    expire_in: 1 week
+
+swarm:
+  stage: swarm
+  script:
+    - echo "🐝 Configuring Docker Swarm..."
+    - make swarm
+  artifacts:
+    paths:
+      - logs/ansible.log
+    expire_in: 1 week
+
+integration_tests:
+  stage: test
+  script:
+    - echo "🧪 Running integration tests..."
+    - ansible-playbook -i inventory.yml tests/test_setup.yml
+  artifacts:
+    paths:
+      - logs/integration_test.log
+    expire_in: 1 week
+
+after_script:
+  - echo "📄 Ansible Log Output:"
+  - cat logs/ansible.log || echo "No logs found."
