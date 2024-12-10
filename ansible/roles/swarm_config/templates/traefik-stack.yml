@@ -6,7 +6,7 @@ services:
       - --providers.docker
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
-      - --certificatesresolvers.le.acme.email=<your-email>
+      - --certificatesresolvers.le.acme.email=ti@serigy.net
       - --certificatesresolvers.le.acme.storage=/acme.json
       - --certificatesresolvers.le.acme.tlschallenge=true
     ports:

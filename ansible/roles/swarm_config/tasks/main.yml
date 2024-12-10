@@ -11,7 +11,7 @@
 
 - name: Join Swarm as worker
   ansible.builtin.shell: |
-    docker swarm join --token {{ hostvars['svr1']['swarm_token'].stdout }} {{ hostvars['svr1']['ansible_host'] }}:2377
+    docker swarm join --token {{ hostvars['svr2']['swarm_token'].stdout }} {{ hostvars['svr2']['ansible_host'] }}:2377
   when: inventory_hostname != 'svr1'
 
 - name: Deploy Portainer stack

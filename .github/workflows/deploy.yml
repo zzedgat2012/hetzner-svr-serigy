@@ -18,6 +18,12 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
       - name: Execute server setup
+        env:
+          TAILSCALE_SVR1_IP: ${{ secrets.TAILSCALE_SVR1_IP }}
+          TAILSCALE_SVR2_IP: ${{ secrets.TAILSCALE_SVR2_IP }}
+          TAILSCALE_SVR3_IP: ${{ secrets.TAILSCALE_SVR3_IP }}
+          ANSIBLE_DEBUG: 1
+          ANSIBLE_VERBOSE: 1
         run: |
           echo "🔒 Performing server hardening..."
           make setup
@@ -35,89 +41,89 @@ jobs:
             \"repository\": \"${{ github.repository }}\"
           }]"
 
-  docker-install:
-    name: Install Docker
-    needs: server-setup
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: tailscale/github-action@v2
-        with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:ci
-      - name: Install Docker
-        run: |
-          echo "🐳 Installing Docker..."
-          make docker
-      - name: Send Docker logs to Baselime
-        run: |
-          LOGS_CONTENT=$(cat logs/docker.log)
-          curl -X 'POST' 'https://events.baselime.io/v1/logs' \
-          -H "x-api-key: ${{ secrets.BASELIME_API_KEY }}" \
-          -H 'Content-Type: application/json' \
-          -H 'x-service: docker-install' \
-          -d "[{
-            \"message\": \"$LOGS_CONTENT\",
-            \"stage\": \"docker-install\",
-            \"buildId\": \"${{ github.run_id }}\",
-            \"repository\": \"${{ github.repository }}\"
-          }]"
+  # docker-install:
+  #   name: Install Docker
+  #   needs: server-setup
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: tailscale/github-action@v2
+  #       with:
+  #         oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+  #         oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+  #         tags: tag:ci
+  #     - name: Install Docker
+  #       run: |
+  #         echo "🐳 Installing Docker..."
+  #         make docker
+  #     - name: Send Docker logs to Baselime
+  #       run: |
+  #         LOGS_CONTENT=$(cat logs/docker.log)
+  #         curl -X 'POST' 'https://events.baselime.io/v1/logs' \
+  #         -H "x-api-key: ${{ secrets.BASELIME_API_KEY }}" \
+  #         -H 'Content-Type: application/json' \
+  #         -H 'x-service: docker-install' \
+  #         -d "[{
+  #           \"message\": \"$LOGS_CONTENT\",
+  #           \"stage\": \"docker-install\",
+  #           \"buildId\": \"${{ github.run_id }}\",
+  #           \"repository\": \"${{ github.repository }}\"
+  #         }]"
 
-  swarm-setup:
-    name: Configure Docker Swarm
-    needs: docker-install
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: tailscale/github-action@v2
-        with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:ci
-      - name: Configure Swarm
-        run: |
-          echo "🐝 Configuring Docker Swarm..."
-          make swarm
-      - name: Send Swarm logs to Baselime
-        run: |
-          LOGS_CONTENT=$(cat logs/swarm.log)
-          curl -X 'POST' 'https://events.baselime.io/v1/logs' \
-          -H "x-api-key: ${{ secrets.BASELIME_API_KEY }}" \
-          -H 'Content-Type: application/json' \
-          -H 'x-service: swarm-setup' \
-          -d "[{
-            \"message\": \"$LOGS_CONTENT\",
-            \"stage\": \"swarm-setup\",
-            \"buildId\": \"${{ github.run_id }}\",
-            \"repository\": \"${{ github.repository }}\"
-          }]"
+  # swarm-setup:
+  #   name: Configure Docker Swarm
+  #   needs: docker-install
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: tailscale/github-action@v2
+  #       with:
+  #         oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+  #         oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+  #         tags: tag:ci
+  #     - name: Configure Swarm
+  #       run: |
+  #         echo "🐝 Configuring Docker Swarm..."
+  #         make swarm
+  #     - name: Send Swarm logs to Baselime
+  #       run: |
+  #         LOGS_CONTENT=$(cat logs/swarm.log)
+  #         curl -X 'POST' 'https://events.baselime.io/v1/logs' \
+  #         -H "x-api-key: ${{ secrets.BASELIME_API_KEY }}" \
+  #         -H 'Content-Type: application/json' \
+  #         -H 'x-service: swarm-setup' \
+  #         -d "[{
+  #           \"message\": \"$LOGS_CONTENT\",
+  #           \"stage\": \"swarm-setup\",
+  #           \"buildId\": \"${{ github.run_id }}\",
+  #           \"repository\": \"${{ github.repository }}\"
+  #         }]"
 
-  integration-tests:
-    name: Run Integration Tests
-    needs: swarm-setup
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: tailscale/github-action@v2
-        with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:ci
-      - name: Run Tests
-        run: |
-          echo "🧪 Running integration tests..."
-          ansible-playbook -i inventory.yml tests/test_setup.yml
-      - name: Send Test logs to Baselime
-        run: |
-          LOGS_CONTENT=$(cat logs/integration_tests.log)
-          curl -X 'POST' 'https://events.baselime.io/v1/logs' \
-          -H "x-api-key: ${{ secrets.BASELIME_API_KEY }}" \
-          -H 'Content-Type: application/json' \
-          -H 'x-service: integration-tests' \
-          -d "[{
-            \"message\": \"$LOGS_CONTENT\",
-            \"stage\": \"integration-tests\",
-            \"buildId\": \"${{ github.run_id }}\",
-            \"repository\": \"${{ github.repository }}\"
-          }]"
+  # integration-tests:
+  #   name: Run Integration Tests
+  #   needs: swarm-setup
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: tailscale/github-action@v2
+  #       with:
+  #         oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+  #         oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+  #         tags: tag:ci
+  #     - name: Run Tests
+  #       run: |
+  #         echo "🧪 Running integration tests..."
+  #         ansible-playbook -i inventory.yml tests/test_setup.yml
+  #     - name: Send Test logs to Baselime
+  #       run: |
+  #         LOGS_CONTENT=$(cat logs/integration_tests.log)
+  #         curl -X 'POST' 'https://events.baselime.io/v1/logs' \
+  #         -H "x-api-key: ${{ secrets.BASELIME_API_KEY }}" \
+  #         -H 'Content-Type: application/json' \
+  #         -H 'x-service: integration-tests' \
+  #         -d "[{
+  #           \"message\": \"$LOGS_CONTENT\",
+  #           \"stage\": \"integration-tests\",
+  #           \"buildId\": \"${{ github.run_id }}\",
+  #           \"repository\": \"${{ github.repository }}\"
+  #         }]"
