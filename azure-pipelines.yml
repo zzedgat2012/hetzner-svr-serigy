@@ -1,13 +1,14 @@
 trigger:
   branches:
     include:
-      - "*"
+      - '*'
 
 stages:
   - stage: Test
+    displayName: "Static Application Security Testing"
     jobs:
       - job: SAST
-        displayName: "Static Application Security Testing"
+        displayName: "Static Application Security Testing (SAST)"
         steps:
           - task: UsePythonVersion@0
             inputs:
@@ -18,6 +19,7 @@ stages:
             displayName: "Run SAST"
 
   - stage: Setup
+    displayName: "Server Setup"
     jobs:
       - job: ServerSetup
         displayName: "Server Hardening"
@@ -31,6 +33,7 @@ stages:
             displayName: "Upload Ansible Logs"
 
   - stage: Docker
+    displayName: "Install Docker"
     dependsOn: Setup
     jobs:
       - job: DockerInstall
@@ -45,6 +48,7 @@ stages:
             displayName: "Upload Docker Logs"
 
   - stage: Swarm
+    displayName: "Configure Docker Swarm"
     dependsOn: Docker
     jobs:
       - job: ConfigureSwarm
@@ -59,6 +63,7 @@ stages:
             displayName: "Upload Swarm Logs"
 
   - stage: IntegrationTests
+    displayName: "Run Integration Tests"
     dependsOn: Swarm
     jobs:
       - job: RunIntegrationTests
@@ -72,30 +77,5 @@ stages:
             artifact: integration_test_logs
             displayName: "Upload Integration Test Logs"
 
-variables:
-  TAILSCALE_AUTH_KEY: $(TAILSCALE_AUTH_KEY)  # Use Azure Pipeline secrets
-  TAILSCALE_ROUTES: $(TAILSCALE_ROUTES)
-  TAILSCALE_SVR1_IP: $(TAILSCALE_SVR1_IP)
-  TAILSCALE_SVR2_IP: $(TAILSCALE_SVR2_IP)
-  TAILSCALE_SVR3_IP: $(TAILSCALE_SVR3_IP)
-
 pool:
   vmImage: 'ubuntu-latest'
-
-steps:
-  - task: Bash@3
-    inputs:
-      targetType: inline
-      script: |
-        echo "Installing Tailscale..."
-        curl -fsSL https://pkgs.tailscale.com/stable/debian/bullseye.gpg | sudo gpg --dearmor -o /usr/share/keyrings/tailscale-archive-keyring.gpg
-        curl -fsSL https://pkgs.tailscale.com/stable/debian/bullseye.list | sudo tee /etc/apt/sources.list.d/tailscale.list
-        sudo apt-get update && sudo apt-get install -y tailscale
-        tailscale up --authkey=${TAILSCALE_AUTH_KEY} --advertise-routes=${TAILSCALE_ROUTES}
-    displayName: "Authenticate with Tailscale"
-
-  - task: PublishBuildArtifacts@1
-    inputs:
-      pathToPublish: 'logs/'
-      artifactName: 'build_logs'
-      publishLocation: 'Container'
