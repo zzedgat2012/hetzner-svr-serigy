@@ -2,7 +2,7 @@
 
 # Variables
 ANSIBLE_PLAYBOOK = ansible-playbook
-INVENTORY = inventory.yml
+INVENTORY = ansible/inventory.yml
 PLAYBOOKS_DIR = ansible/playbooks
 
 .PHONY: all setup docker swarm
