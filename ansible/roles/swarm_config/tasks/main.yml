@@ -11,7 +11,7 @@
 
 - name: Join Swarm as worker
   ansible.builtin.shell: |
-    docker swarm join --token {{ hostvars['svr2']['swarm_token'].stdout }} {{ hostvars['svr2']['ansible_host'] }}:2377
+    docker swarm join --token {{ hostvars['svr1']['swarm_token'].stdout }} {{ hostvars['svr1']['ansible_host'] }}:2377
   when: inventory_hostname != 'svr1'
 
 - name: Deploy Portainer stack
@@ -20,7 +20,7 @@
     dest: /opt/portainer-stack.yml
 
 - name: Deploy Portainer stack to Swarm
-  ansible.builtin.shell: docker stack deploy -c /opt/portainer-stack.yml portainer
+  ansible.builtin.shell: docker stack deploy -c /opt/portainer-agent-stack.yml portainer
 
 - name: Deploy Traefik stack
   ansible.builtin.copy:

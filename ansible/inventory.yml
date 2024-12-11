@@ -6,6 +6,8 @@ all:
       ansible_host: "{{ lookup('env', 'TAILSCALE_SVR2_IP') }}"
     svr3:
       ansible_host: "{{ lookup('env', 'TAILSCALE_SVR3_IP') }}"
+    svr4:
+      ansible_host: "{{ lookup('env', 'TAILSCALE_SVR4_IP') }}"
 
   vars:
     ansible_user: root
