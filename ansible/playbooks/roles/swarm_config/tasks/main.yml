@@ -1,0 +1,59 @@
+- name: Initialize Docker Swarm (only on svr1)
+  ansible.builtin.command: docker swarm init --advertise-addr {{ ansible_host }}
+  changed_when: false
+  when:
+    - inventory_hostname == 'svr1'
+    - not ansible_check_mode
+  args:
+    creates: /etc/docker/swarm/docker-state.json
+
+- name: Get the Swarm join token
+  ansible.builtin.command: docker swarm join-token worker -q
+  register: swarm_token
+  changed_when: false
+  when: inventory_hostname == 'svr1'
+
+- name: Join Swarm as worker
+  ansible.builtin.command: >
+    docker swarm join
+    --token {{ hostvars['svr1']['swarm_token'].stdout }}
+    {{ hostvars['svr1']['ansible_host'] }}:2377
+  changed_when: false
+  when:
+    - inventory_hostname != 'svr1'
+    - not ansible_check_mode
+  args:
+    creates: /etc/docker/swarm/docker-state.json
+
+- name: Deploy Portainer stack
+  ansible.builtin.copy:
+    src: templates/portainer-stack.yml
+    dest: /opt/portainer-stack.yml
+    mode: "0644"
+    owner: root
+    group: root
+
+- name: Deploy Portainer stack to Swarm
+  ansible.builtin.command: docker stack deploy -c /opt/portainer-agent-stack.yml portainer
+  changed_when: false
+  register: portainer_deploy
+  args:
+    creates: /var/run/docker/cluster/docker-stack-portainer.json
+
+- name: Copy configuration file
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    mode: "0644"
+    owner: root
+    group: root
+  loop:
+    - { src: "templates/portainer-stack.yml", dest: "/opt/portainer-stack.yml" }
+    - { src: "templates/traefik-stack.yml", dest: "/opt/traefik-stack.yml" }
+
+- name: Deploy stacks to Swarm
+  ansible.builtin.command: "docker stack deploy -c /opt/{{ item }}-stack.yml {{ item }}"
+  changed_when: false
+  loop:
+    - portainer
+    - traefik
