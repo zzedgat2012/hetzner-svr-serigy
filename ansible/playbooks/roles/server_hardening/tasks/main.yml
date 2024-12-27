@@ -1,0 +1,159 @@
+- tasks:
+    - name: "User Management"
+      block:
+        - name: Create user 'serigy'
+          ansible.builtin.user:
+            name: serigy
+            state: present
+            groups: wheel
+            shell: /bin/bash
+            create_home: true
+            system: false
+      rescue:
+        - name: Log user creation failure
+          ansible.builtin.debug:
+            msg: "Failed to create user 'serigy'"
+      always:
+        - name: Verify user existence
+          ansible.builtin.getent:
+            database: passwd
+            key: serigy
+    - name: "Package Installation"
+      block:
+        - name: Install security packages
+          ansible.builtin.dnf:
+            name:
+              - epel-release
+              - fail2ban
+              - policycoreutils-python-utils
+              - audit
+              - vim
+              - nano
+              - chrony
+            state: present
+            update_cache: true
+    - name: "SELinux Configuration"
+      block:
+        - name: Set SELinux state
+          ansible.posix.selinux:
+            state: enforcing
+            policy: targeted
+        - name: Ensure SELinux configuration is persistent
+          ansible.builtin.lineinfile:
+            path: /etc/selinux/config
+            regexp: "^SELINUX="
+            line: "SELINUX=enforcing"
+    - name: "Fail2Ban Setup"
+      block:
+        - name: Deploy Fail2Ban configuration
+          ansible.builtin.copy:
+            dest: /etc/fail2ban/jail.local
+            content: |
+              [DEFAULT]
+              bantime = 10m
+              findtime = 10m
+              maxretry = 5
+
+              [sshd]
+              enabled = true
+            mode: "0644"
+            owner: root
+            group: root
+        - name: Enable Fail2Ban service
+          ansible.builtin.service:
+            name: fail2ban
+            state: started
+            enabled: true
+    - name: "Audit Configuration"
+      block:
+        - name: Deploy audit rules
+          ansible.builtin.copy:
+            dest: /etc/audit/audit.rules
+            content: |
+              -w /etc/passwd -p wa -k passwd_changes
+              -w /etc/shadow -p wa -k shadow_changes
+              -w /var/log/secure -p wa -k secure_logs
+              -w /var/log/messages -p wa -k message_logs
+              -w /etc/ssh/sshd_config -p wa -k ssh_config_changes
+            mode: "0600"
+            owner: root
+            group: root
+        - name: Enable auditd service
+          ansible.builtin.service:
+            name: auditd
+            state: started
+            enabled: true
+    - name: "SSH Hardening"
+      block:
+        - name: Set SSH configuration
+          ansible.builtin.lineinfile:
+            path: /etc/ssh/sshd_config
+            regexp: "{{ item.regexp }}"
+            line: "{{ item.line }}"
+            state: present
+            mode: "0600"
+          loop:
+            - {regexp: "^#?PermitRootLogin.*", line: "PermitRootLogin no"}
+            - {regexp: "^#?PasswordAuthentication.*", line: "PasswordAuthentication no"}
+            - {regexp: "^#?AllowUsers.*", line: "AllowUsers serigy"}
+          notify: Restart SSH
+    - name: "Firewall Configuration"
+      block:
+        - name: Enable firewalld
+          ansible.builtin.service:
+            name: firewalld
+            state: started
+            enabled: true
+        - name: Configure firewall rules
+          ansible.posix.firewalld:
+            service: "{{ item }}"
+            permanent: true
+            state: enabled
+            immediate: true
+          loop:
+            - ssh
+            - http
+            - https
+    - name: "Time Synchronization"
+      block:
+        - name: Enable chronyd service
+          ansible.builtin.service:
+            name: chronyd
+            state: started
+            enabled: true
+    - name: "Kernel Hardening"
+      block:
+        - name: Deploy sysctl configuration
+          ansible.builtin.copy:
+            dest: /etc/sysctl.d/99-hardening.conf
+            content: |
+              net.ipv4.conf.all.rp_filter = 1
+              net.ipv4.conf.default.rp_filter = 1
+              net.ipv4.conf.all.accept_redirects = 0
+              net.ipv4.conf.default.accept_redirects = 0
+              net.ipv4.conf.all.send_redirects = 0
+              net.ipv4.conf.default.send_redirects = 0
+              net.ipv4.conf.all.log_martians = 1
+              net.ipv4.conf.default.log_martians = 1
+              kernel.randomize_va_space = 2
+            mode: "0644"
+            owner: root
+            group: root
+        - name: Apply sysctl settings
+          ansible.builtin.command: sysctl --system
+          changed_when: false
+    - name: "Service Management"
+      block:
+        - name: Disable unnecessary services
+          ansible.builtin.service:
+            name: "{{ item }}"
+            state: stopped
+            enabled: false
+          loop:
+            - cups
+            - avahi-daemon
+- handlers:
+    - name: Restart SSH
+      ansible.builtin.service:
+        name: sshd
+        state: restarted

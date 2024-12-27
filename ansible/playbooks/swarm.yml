@@ -1,6 +1,10 @@
----
-- hosts: svr1,svr2,svr3
+- name: "Install Docker prerequisites"
+  hosts: svr1,svr2,svr3,svr4
   become: true
   roles:
     - docker_install
+- name: "Configure Docker Swarm cluster"
+  hosts: svr1,svr2,svr3,svr4
+  become: true
+  roles:
     - swarm_config

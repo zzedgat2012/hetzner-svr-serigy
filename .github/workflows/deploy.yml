@@ -1,0 +1,166 @@
+name: Server Setup and Configuration
+
+on:
+  push:
+    branches:
+      - '*'
+  workflow_dispatch:
+
+jobs:
+  server-setup:
+    name: Server Setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+      - name: Check if server is already hardened
+        id: check_harden
+        run: |
+          if [ -f /tmp/server_hardened.flag ]; then
+            echo "Server already hardened. Skipping..."
+            echo "hardened=true" >> $GITHUB_ENV
+          else
+            echo "hardened=false" >> $GITHUB_ENV
+          fi
+      - name: Execute server setup
+        if: env.hardened != 'true'
+        env:
+          TAILSCALE_SVR1_IP: ${{ secrets.TAILSCALE_SVR1_IP }}
+          TAILSCALE_SVR2_IP: ${{ secrets.TAILSCALE_SVR2_IP }}
+          TAILSCALE_SVR3_IP: ${{ secrets.TAILSCALE_SVR3_IP }}
+          TAILSCALE_SVR4_IP: ${{ secrets.TAILSCALE_SVR4_IP }}
+          ANSIBLE_DEBUG: 1
+          ANSIBLE_VERBOSE: 1
+        run: |
+          echo "🔒 Performing server hardening..."
+          make setup
+          touch /tmp/server_hardened.flag
+      - name: Send Ansible logs to Baselime
+        if: env.hardened != 'true'
+        run: |
+          LOGS_CONTENT=$(cat logs/ansible.log)
+          curl -X 'POST' 'https://events.baselime.io/v1/logs' \
+          -H "x-api-key: ${{ secrets.BASELIME_API_KEY }}" \
+          -H 'Content-Type: application/json' \
+          -H 'x-service: server-setup' \
+          -d "[{
+            \"message\": \"$LOGS_CONTENT\",
+            \"stage\": \"server-setup\",
+            \"buildId\": \"${{ github.run_id }}\",
+            \"repository\": \"${{ github.repository }}\"
+          }]"
+
+  docker-install:
+    name: Install Docker
+    needs: server-setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+      - name: Check if Docker is already installed
+        id: check_docker
+        run: |
+          if [ -f /tmp/docker_installed.flag ]; then
+            echo "Docker already installed. Skipping..."
+            echo "docker_installed=true" >> $GITHUB_ENV
+          else
+            echo "docker_installed=false" >> $GITHUB_ENV
+          fi
+      - name: Install Docker
+        if: env.docker_installed != 'true'
+        run: |
+          echo "🐳 Installing Docker..."
+          make docker
+          touch /tmp/docker_installed.flag
+      - name: Send Docker logs to Baselime
+        if: env.docker_installed != 'true'
+        run: |
+          LOGS_CONTENT=$(cat logs/docker.log)
+          curl -X 'POST' 'https://events.baselime.io/v1/logs' \
+          -H "x-api-key: ${{ secrets.BASELIME_API_KEY }}" \
+          -H 'Content-Type: application/json' \
+          -H 'x-service: docker-install' \
+          -d "[{
+            \"message\": \"$LOGS_CONTENT\",
+            \"stage\": \"docker-install\",
+            \"buildId\": \"${{ github.run_id }}\",
+            \"repository\": \"${{ github.repository }}\"
+          }]"
+
+  swarm-setup:
+    name: Configure Docker Swarm
+    needs: docker-install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+      - name: Check if Swarm is already configured
+        id: check_swarm
+        run: |
+          if [ -f /tmp/swarm_configured.flag ]; then
+            echo "Swarm already configured. Skipping..."
+            echo "swarm_configured=true" >> $GITHUB_ENV
+          else
+            echo "swarm_configured=false" >> $GITHUB_ENV
+          fi
+      - name: Configure Swarm
+        if: env.swarm_configured != 'true'
+        run: |
+          echo "🐝 Configuring Docker Swarm..."
+          make swarm
+          touch /tmp/swarm_configured.flag
+      - name: Send Swarm logs to Baselime
+        if: env.swarm_configured != 'true'
+        run: |
+          LOGS_CONTENT=$(cat logs/swarm.log)
+          curl -X 'POST' 'https://events.baselime.io/v1/logs' \
+          -H "x-api-key: ${{ secrets.BASELIME_API_KEY }}" \
+          -H 'Content-Type: application/json' \
+          -H 'x-service: swarm-setup' \
+          -d "[{
+            \"message\": \"$LOGS_CONTENT\",
+            \"stage\": \"swarm-setup\",
+            \"buildId\": \"${{ github.run_id }}\",
+            \"repository\": \"${{ github.repository }}\"
+          }]"
+
+  integration-tests:
+    name: Run Integration Tests
+    needs: swarm-setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+      - name: Run Tests
+        run: |
+          echo "🧪 Running integration tests..."
+          ansible-playbook -i inventory.yml tests/test_setup.yml
+      - name: Send Test logs to Baselime
+        run: |
+          LOGS_CONTENT=$(cat logs/integration_tests.log)
+          curl -X 'POST' 'https://events.baselime.io/v1/logs' \
+          -H "x-api-key: ${{ secrets.BASELIME_API_KEY }}" \
+          -H 'Content-Type: application/json' \
+          -H 'x-service: integration-tests' \
+          -d "[{
+            \"message\": \"$LOGS_CONTENT\",
+            \"stage\": \"integration-tests\",
+            \"buildId\": \"${{ github.run_id }}\",
+            \"repository\": \"${{ github.repository }}\"
+          }]"
