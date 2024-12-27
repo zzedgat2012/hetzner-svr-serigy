@@ -1,7 +1,5 @@
----
 - name: "Setup servers for ISO 27001"
   hosts: all
   become: true
-
   roles:
     - server_hardening

@@ -1,12 +1,31 @@
----
 - name: Install Docker and dependencies
   ansible.builtin.dnf:
     name:
       - docker-ce
       - docker-ce-cli
       - containerd.io
+      - container-selinux
     state: present
-
+- name: Enable container_manage_cgroup SELinux boolean
+  ansible.posix.seboolean:
+    name: container_manage_cgroup
+    state: true
+    persistent: true
+- name: Ensure /etc/docker directory exists
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    mode: '0755'
+- name: Configure Docker daemon with SELinux
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    content: |
+      {
+        "selinux-enabled": true
+      }
+    mode: '0644'
+    owner: root
+    group: root
 - name: Start and enable Docker
   ansible.builtin.service:
     name: docker
